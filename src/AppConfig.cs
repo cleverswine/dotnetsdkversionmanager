@@ -6,7 +6,7 @@ public class AppConfig
 {
     public AppConfig()
     {
-        DotnetCommand = DotnetCmd();
+        DotnetCommand = Dotnet();
         RuntimeIdentifier = Rid();
         AppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
     }
@@ -15,7 +15,7 @@ public class AppConfig
     public string DotnetCommand { get; }
     public string AppDataPath { get; }
 
-    private string DotnetCmd()
+    private static string Dotnet()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "dotnet";
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return "/usr/bin/dotnet";
@@ -24,7 +24,7 @@ public class AppConfig
         throw new Exception($"could not determine dotnet command for {RuntimeInformation.RuntimeIdentifier}");
     }
 
-    private string Rid()
+    private static string Rid()
     {
         if (RuntimeInformation.RuntimeIdentifier.Contains("osx") || RuntimeInformation.RuntimeIdentifier.Contains("mac"))
             return

@@ -3,7 +3,7 @@ using CliWrap;
 using CliWrap.Buffered;
 using DotnetSdkVersionManager.Interfaces;
 
-namespace DotnetSdkVersionManager;
+namespace DotnetSdkVersionManager.Services;
 
 public class NetSdkLocal : INetSdkLocal
 {

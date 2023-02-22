@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 using DotnetSdkVersionManager.Interfaces;
 using DotnetSdkVersionManager.Models;
 
-namespace DotnetSdkVersionManager;
+namespace DotnetSdkVersionManager.Services;
 
 public class NetSdkRemote : INetSdkRemote
 {

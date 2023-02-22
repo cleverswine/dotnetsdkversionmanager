@@ -1,7 +1,7 @@
 using System.Text.Json;
 using DotnetSdkVersionManager.Interfaces;
 
-namespace DotnetSdkVersionManager;
+namespace DotnetSdkVersionManager.Services;
 
 public class FileSystemCache : ISimpleCache
 {

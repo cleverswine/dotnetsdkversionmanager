@@ -3,13 +3,18 @@ using DotnetSdkVersionManager.Models;
 
 namespace DotnetSdkVersionManager;
 
-public class NetSdk
+public class Commander
 {
     private readonly AppConfig _appConfig;
     private readonly INetSdkLocal _netSdkLocal;
     private readonly INetSdkRemote _netSdkRemote;
-
-    public NetSdk(AppConfig appConfig, INetSdkLocal netSdkLocal, INetSdkRemote netSdkRemote)
+    
+    // TODO - work on better output + logging
+    private static void WriteTitle(string s) => Console.WriteLine($"--------------\n{s}\n--------------");
+    private static void WriteStep(string s) => Console.WriteLine($"=> {s}");
+    private static void WriteLine(string s) => Console.WriteLine(s);
+    
+    public Commander(AppConfig appConfig, INetSdkLocal netSdkLocal, INetSdkRemote netSdkRemote)
     {
         _appConfig = appConfig;
         _netSdkLocal = netSdkLocal;
@@ -18,38 +23,36 @@ public class NetSdk
 
     public async Task List()
     {
-        Console.WriteLine("== LIST ==");
-        
+        WriteTitle("Installed SDKs");
+
         var localSdks = await _netSdkLocal.List();
         var releaseIndices = await _netSdkRemote.GetReleaseIndices();
         var updates = new List<string>();
 
         foreach (var localSdk in localSdks)
         {
-            Console.WriteLine(localSdk);
+            WriteLine("* " + localSdk);
 
             var releaseIndex = releaseIndices.GetReleaseIndex(localSdk.ParseFrameworkVersion());
             if (!localSdks.Contains(releaseIndex.LatestSdk))
             {
-                updates.Add($"SDK {releaseIndex.LatestSdk} was released on {releaseIndex.LatestReleaseDate:yyyy-MM-dd}. Run `dvm upgrade net{releaseIndex.ChannelVersion}` to install it.");
+                updates.Add(
+                    $"SDK {releaseIndex.LatestSdk} was released on {releaseIndex.LatestReleaseDate:yyyy-MM-dd}. Use the upgrade command to install it.");
             }
         }
 
-        if (updates.Any())
-        {
-            Console.WriteLine("\nUPDATES AVAILABLE");
-        }
+        WriteLine(updates.Any() ? "\nUPDATES AVAILABLE" : "\nEverything is up to date!");
 
         foreach (var update in updates.Distinct())
         {
-            Console.WriteLine(update);
+            WriteLine(update);
         }
     }
 
     public async Task ListAvailable(string framework)
     {
-        Console.WriteLine("== LIST AVAILABLE ==");
-        
+        WriteTitle("Available SDKs");
+
         var localSdks = await _netSdkLocal.List();
         var releaseIndices = await _netSdkRemote.GetReleaseIndices();
 
@@ -66,7 +69,7 @@ public class NetSdk
             foreach (var release in releases)
             {
                 if (release.Sdk.Version == null) continue;
-                Console.WriteLine(localSdks.Contains(release.Sdk.Version)
+                WriteLine(localSdks.Contains(release.Sdk.Version)
                     ? $"* {release.Sdk.VersionDisplay}"
                     : $"  {release.Sdk.VersionDisplay}");
             }
@@ -75,8 +78,8 @@ public class NetSdk
 
     public async Task Install(string version)
     {
-        Console.WriteLine("== INSTALL ==");
-        
+        WriteTitle($"Install");
+
         var dots = version.Count(x => x == '.');
         if (dots > 2) throw new ArgumentException("invalid SDK version format", nameof(version));
 
@@ -89,12 +92,67 @@ public class NetSdk
         var sdkVersionToInstall = dots < 2 ? releaseIndex.LatestSdk : version;
         if (localSdks.Contains(sdkVersionToInstall))
         {
-            Console.WriteLine($"SDK version {sdkVersionToInstall} is already installed");
+            WriteLine($"SDK version {sdkVersionToInstall} is already installed");
             return;
         }
 
         var releaseToInstall = releases.GetRelease(sdkVersionToInstall);
+        await Install(releaseToInstall);
+    }
 
+    public async Task Uninstall(string version)
+    {
+        WriteTitle($"Uninstall");
+
+        var dots = version.Count(x => x == '.');
+        if (version.Contains(' ') || dots != 2) throw new ArgumentException("invalid SDK version format", nameof(version));
+        await UninstallInt(version);
+    }
+
+    public async Task Upgrade(string framework)
+    {
+        var frameWorkVersion = framework == "all" ? "" : framework.ParseFrameworkVersion();
+
+        WriteTitle($"Upgrade");
+
+        // get all installed frameworks
+        var localSdks = await _netSdkLocal.List();
+        var frameworksToCheck = frameWorkVersion != ""
+            ? new List<string> {frameWorkVersion}
+            : localSdks.Select(x => x.ParseFrameworkVersion()).Distinct().ToList();
+
+        WriteLine($"Updating .NET frameworks: {string.Join(", ", frameworksToCheck.Select(x => $"net{x}"))}");
+
+        var releaseIndices = await _netSdkRemote.GetReleaseIndices();
+
+        foreach (var installedFramework in frameworksToCheck)
+        {
+            WriteStep($"checking net{installedFramework}...");
+            var releaseIndex = releaseIndices.GetReleaseIndex(installedFramework);
+            if (!localSdks.Contains(releaseIndex.LatestSdk))
+            {
+                // upgrade
+                WriteStep($"upgrading net{installedFramework} to SDK {releaseIndex.LatestSdk}...");
+                var releases = await _netSdkRemote.GetReleases(releaseIndex);
+                await Install(releases.GetRelease(releaseIndex.LatestSdk));
+
+                // remove old ones
+                var sdksToRemove = localSdks.Where(x => x.ParseFrameworkVersion() == installedFramework);
+                foreach (var sdkToRemove in sdksToRemove)
+                {
+                    WriteStep($"removing SDK {sdkToRemove}...");
+                    await UninstallInt(sdkToRemove);
+                }
+            }
+            else
+            {
+                WriteLine($"the latest SDK is already installed for net{installedFramework}");
+            }
+        }
+    }
+
+    private async Task Install(Release releaseToInstall)
+    {
         if (_appConfig.RuntimeIdentifier.Contains("linux"))
         {
             var installScript = await _netSdkRemote.DownloadLinuxInstaller();
@@ -107,7 +165,7 @@ public class NetSdk
         {
             var sdkFileInfo = releaseToInstall.Sdk.Files.FirstOrDefault(x =>
                 x.Rid.Equals(_appConfig.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) && x.Name.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase));
-            if (sdkFileInfo?.Url == null) throw new ArgumentException("SDK installation file not found", nameof(version));
+            if (sdkFileInfo?.Url == null) throw new ArgumentException("SDK installation file not found", nameof(releaseToInstall));
             var pkgFile = await _netSdkRemote.DownloadFile(sdkFileInfo.Url, sdkFileInfo.Name);
             await _netSdkLocal.Run("/usr/sbin/installer", $"-pkg {pkgFile} -target /", true);
             return;
@@ -116,13 +174,8 @@ public class NetSdk
         throw new Exception($"runtime identifier {_appConfig.RuntimeIdentifier} is not supported at this time");
     }
 
-    public async Task Uninstall(string version)
+    private async Task UninstallInt(string version)
     {
-        Console.WriteLine("== UNINSTALL ==");
-        
-        var dots = version.Count(x => x == '.');
-        if (version.Contains(' ') || dots != 2) throw new ArgumentException("invalid SDK version format", nameof(version));
-
         if (_appConfig.RuntimeIdentifier.Contains("linux"))
         {
             // I don't like this...
@@ -144,28 +197,5 @@ public class NetSdk
         }
 
         throw new Exception($"runtime identifier {_appConfig.RuntimeIdentifier} is not supported at this time");
-    }
-
-    public async Task Upgrade(string framework)
-    {
-        Console.WriteLine("== UPGRADE ==");
-        
-        var frameWorkVersion = framework.ParseFrameworkVersion();
-        var localSdks = await _netSdkLocal.List();
-        var releaseIndices = await _netSdkRemote.GetReleaseIndices();
-
-        foreach (var localSdk in localSdks)
-        {
-            var localSdkFramework = localSdk.ParseFrameworkVersion();
-            if (!string.IsNullOrWhiteSpace(frameWorkVersion) && localSdkFramework != frameWorkVersion) continue;
-            
-            var releaseIndex = releaseIndices.GetReleaseIndex(localSdkFramework);
-            if (localSdk == releaseIndex.LatestSdk) continue;
-            
-            Console.WriteLine($"installing {releaseIndex.LatestSdk}...");
-            await Install(releaseIndex.LatestSdk);
-            Console.WriteLine($"removing {localSdk}...");
-            await Uninstall(localSdk);
-        }
     }
 }
