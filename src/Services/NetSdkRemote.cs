@@ -57,4 +57,12 @@ public class NetSdkRemote : INetSdkRemote
     {
         return await DownloadFile(new Uri(MacOsUninstallerUrl), "dotnet-core-uninstall.tar.gz");
     }
+
+    public async Task UpdateCache()
+    {
+        await _cache.Clean();
+        var releaseIndices = await GetReleaseIndices();
+        var tasks = releaseIndices.Select(GetReleases).ToArray();
+        await Task.WhenAll(tasks);
+    }
 }

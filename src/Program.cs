@@ -4,16 +4,20 @@ using System.CommandLine.Help;
 using System.CommandLine.Parsing;
 using DotnetSdkVersionManager;
 using DotnetSdkVersionManager.Services;
+using Spectre.Console;
 
+// set up services
 var appConfig = new AppConfig();
 var httpClient = new HttpClient();
 var cache = new FileSystemCache(appConfig);
 var netSdkLocal = new NetSdkLocal(appConfig);
 var netSdkRemote = new NetSdkRemote(httpClient, cache);
+var commander = new Commander(appConfig, netSdkLocal, netSdkRemote);
 
-await ConfigureCommandLine(new Commander(appConfig, netSdkLocal, netSdkRemote))
-    .InvokeAsync(args);
+// parse command line and execute command
+await ConfigureCommandLine(commander).InvokeAsync(args);
 
+// set up command line parsing using System.CommandLine
 Parser ConfigureCommandLine(Commander cmd)
 {
     var rootCmd = new RootCommand(".NET SDK Version Manager");
@@ -45,11 +49,11 @@ Parser ConfigureCommandLine(Commander cmd)
     rootCmd.Add(uninstallCmd);
 
     var infoCmd = new Command("info", "show information about a SDK") {sdkVersionArg};
-    infoCmd.SetHandler(sdkVersion => Console.WriteLine("Info about " + sdkVersion), sdkVersionArg);
+    infoCmd.SetHandler(cmd.Info, sdkVersionArg);
     rootCmd.Add(infoCmd);
 
     var updateCmd = new Command("update", "update the SDK cache");
-    updateCmd.SetHandler(() => Console.WriteLine("Update..."));
+    updateCmd.SetHandler(cmd.Update);
     rootCmd.Add(updateCmd);
 
     const string examples = """
@@ -74,11 +78,17 @@ Examples:
 
     var parser = new CommandLineBuilder(rootCmd)
         .UseDefaults()
-        .UseExceptionHandler((exception, ctx) =>
+        .UseExceptionHandler((exception, _) =>
         {
             if (exception is not ArgumentException)
-                ctx.Console.WriteLine("Oops! Something bad happened:");
-            ctx.Console.WriteLine(exception.Message);
+            {
+                AnsiConsole.MarkupLine(":red_exclamation_mark: Oops, something bad happened:");
+                AnsiConsole.MarkupLineInterpolated($":red_exclamation_mark: => {exception.Message}");
+            }
+            else
+            {
+                AnsiConsole.MarkupLineInterpolated($":white_exclamation_mark: {exception.Message}");
+            }
         })
         .UseHelp(ctx =>
         {
@@ -87,7 +97,7 @@ Examples:
                     .CustomizeLayout(_ =>
                     {
                         return HelpBuilder.Default.GetLayout()
-                                //.Prepend(_ => AnsiConsole.Write(new FigletText("dvm")))
+                                .Prepend(_ => AnsiConsole.Write(new FigletText("dvm")))
                                 .Append(_ => Console.WriteLine(examples))
                             ;
                     });

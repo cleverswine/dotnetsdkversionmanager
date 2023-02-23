@@ -9,4 +9,5 @@ public interface INetSdkRemote
     Task<string> DownloadFile(Uri uri, string name);
     Task<string> DownloadLinuxInstaller();
     Task<string> DownloadMacOsUninstaller();
+    Task UpdateCache();
 }
