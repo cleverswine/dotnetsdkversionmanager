@@ -9,7 +9,7 @@ A multi-platform CLI for managing .NET SDK installations, inspired by [Dots](htt
 - list installed and available SDKs
 - easily upgrade to the latest SDK
 - install and uninstall specific SDK versions
-- get detailed info about a SDK (TBD)
+- get detailed info about a SDK
 - support for MacOS and Linux (Windows TBD)
 
 ## Screenshots!
